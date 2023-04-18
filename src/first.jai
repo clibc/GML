@@ -7,22 +7,13 @@
 
 should_quit_game := false;
 
-grid_size_x :: 50;
-grid_size_y :: 50;
+grid_size_x :: 7;
+grid_size_y :: 7;
 
 grid : [grid_size_x * grid_size_y] bool;
 
 window_size_x :: 1200;
 window_size_y :: 800;
-
-my_immediate_quad :: (x : float, y : float, width : float, height : float)
-{
-    bot_left  := make_vector2(x, y);
-    bot_right := make_vector2(x + width, y);
-    top_right := make_vector2(x + width, y + height);
-    top_left  := make_vector2(x, y + height);    
-    immediate_quad(bot_left, bot_right, top_right, top_left);
-}
 
 main :: ()
 {
@@ -34,7 +25,7 @@ main :: ()
     cell_size     := 30.0;
     line_thicness := 1.0;
     line_width    := grid_size_x * cell_size;
-    line_height   := grid_size_y * cell_size;            
+    line_height   := grid_size_y * cell_size;
 
     camera_position     : Vector2 = make_vector2(0, 0);
     camera_scale_factor := 1.0;
@@ -42,10 +33,6 @@ main :: ()
 
     is_dragging := false;
 
-    grid[2] = true;
-    grid[3] = true;
-    grid[2 + 2 * grid_size_y] = true;
-    
     while !should_quit_game
     {
         update_window_events();
@@ -53,7 +40,10 @@ main :: ()
         x, y, success := get_mouse_pointer_position(window, true);
         mouse_position       := make_vector2(cast(float) x, cast(float) y) * camera_scale_factor;
         mouse_world_position := mouse_position + camera_position;
-        
+
+        quad_index_x := cast(int) mouse_world_position.x / cast(int)cell_size;
+        quad_index_y := cast(int) mouse_world_position.y / cast(int)cell_size;
+
         for events_this_frame
         {
             if it.type == .QUIT || (it.key_pressed && it.key_code == .ESCAPE)
@@ -61,11 +51,26 @@ main :: ()
                 should_quit_game = true;
             }
 
+            if it.key_pressed && it.key_code == #char "A"
+            {
+                simulate_generation();
+            }
+
             if it.type == .KEYBOARD && it.key_code == .MOUSE_BUTTON_LEFT
             {
                 is_dragging = it.key_pressed != 0;
             }
 
+            if it.type == .KEYBOARD && it.key_code == .MOUSE_BUTTON_RIGHT
+            {
+                // add cell
+                if quad_index_y < grid_size_y && quad_index_x < grid_size_x &&
+                   quad_index_y >= 0 && quad_index_x >= 0
+                {
+                    grid[quad_index_y * grid_size_x + quad_index_x] = true;
+                }
+            }
+            
             if it.type == .MOUSE_WHEEL
             {
                 scale_delta : float;
@@ -73,8 +78,8 @@ main :: ()
                 if it.wheel_delta > 0 scale_delta = -0.1;
                 else scale_delta = 0.1;
 
-                old_scale_factor := camera_scale_factor; 
-                
+                old_scale_factor := camera_scale_factor;
+
                 camera_scale_factor += scale_delta;
                 Clamp(*camera_scale_factor, 1.0, 3.0);
 
@@ -92,12 +97,9 @@ main :: ()
             camera_position.x -= mouse_delta_x * camera_scale_factor * aspect_ratio;
             camera_position.y += mouse_delta_y * camera_scale_factor;
         }
-        
-        quad_index_x := cast(int) mouse_world_position.x / cast(int)cell_size;
-        quad_index_y := cast(int) mouse_world_position.y / cast(int)cell_size;
 
         clear_render_target(.15, .08, .08, 1);
-        
+
         set_shader_for_color();
         immediate_set_2d_projection(cast(s32) (window_size_x * camera_scale_factor),
                                     cast(s32) (window_size_y * camera_scale_factor));
@@ -125,17 +127,17 @@ main :: ()
             if !grid[i] continue;
 
             offset_x := i % grid_size_x;
-            offset_y := i / grid_size_y;
+            offset_y := i / grid_size_x;
 
             my_immediate_quad(offset_x * cell_size - camera_position.x,
                               offset_y * cell_size - camera_position.y,
-                             cell_size, cell_size);
+                              cell_size, cell_size);
         }
-        
+
         my_immediate_quad(quad_index_x * cell_size - camera_position.x,
                           quad_index_y * cell_size - camera_position.y,
                           cell_size, cell_size);
-        
+
         immediate_flush();
 
         draw_text(font, 0, window_size_y - 40, "Hello sailor!");
@@ -144,4 +146,91 @@ main :: ()
 
         Sleep(1);
     }
+}
+
+my_immediate_quad :: (x : float, y : float, width : float, height : float)
+{
+    bot_left  := make_vector2(x, y);
+    bot_right := make_vector2(x + width, y);
+    top_right := make_vector2(x + width, y + height);
+    top_left  := make_vector2(x, y + height);
+    immediate_quad(bot_left, bot_right, top_right, top_left);
+}
+
+get_2d_index :: (index : int) -> x : int, y : int
+{
+    return index % grid_size_x, index / grid_size_x;
+}
+
+grid_is_cell_alive :: (x : int, y : int) -> bool
+{
+    if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y return false;
+    index := y * grid_size_x + x;
+    return grid[index];
+}
+
+get_alive_neighbours :: (x : int, y : int) -> int
+{
+    alive_neighbours := 0;
+
+    if grid_is_cell_alive(x-1, y)   then alive_neighbours += 1;
+    if grid_is_cell_alive(x+1, y)   then alive_neighbours += 1;
+    if grid_is_cell_alive(x,   y-1) then alive_neighbours += 1;
+    if grid_is_cell_alive(x,   y+1) then alive_neighbours += 1;
+    if grid_is_cell_alive(x-1, y-1) then alive_neighbours += 1;
+    if grid_is_cell_alive(x+1, y+1) then alive_neighbours += 1;
+    if grid_is_cell_alive(x+1, y-1) then alive_neighbours += 1;
+    if grid_is_cell_alive(x-1, y+1) then alive_neighbours += 1;
+
+    return alive_neighbours;
+}
+
+died_cells_per_generation    : [..] int;
+spawned_cells_per_generation : [..] int;
+
+simulate_generation :: ()
+{
+    print("simulating...\n");
+
+    for grid
+    {
+        x, y := get_2d_index(it_index);
+
+        alive_neighbours := get_alive_neighbours(x,y);
+        alive_itself := grid_is_cell_alive(x, y);
+
+        if alive_itself
+        {
+            if alive_neighbours < 2
+            {
+                print("[%] (%, %) dies of loneliness\n", alive_neighbours, x, y);
+                array_add(*died_cells_per_generation, it_index);
+            }
+            else if alive_neighbours > 3
+            {
+                print("[%] (%, %) dies of overpopulation\n", alive_neighbours, x, y);
+                array_add(*died_cells_per_generation, it_index);
+            }
+            else
+                print("[%] (%, %) survives\n", alive_neighbours, x, y);
+        }
+        else if alive_neighbours == 3
+        {
+            print("[%] (%, %) spawns\n", alive_neighbours, x, y);
+            array_add(*spawned_cells_per_generation, it_index);
+        }
+    }
+
+    for died_cells_per_generation
+    {
+        grid[it] = false;
+    }
+
+    for spawned_cells_per_generation
+    {
+        grid[it] = true;
+    }
+
+    array_reset_keeping_memory(*died_cells_per_generation);
+    array_reset_keeping_memory(*spawned_cells_per_generation);
 }
