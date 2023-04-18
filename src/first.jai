@@ -7,6 +7,11 @@
 
 should_quit_game := false;
 
+grid_size_x :: 50;
+grid_size_y :: 50;
+
+grid : [grid_size_x * grid_size_y] bool;
+
 window_size_x :: 1200;
 window_size_y :: 800;
 
@@ -26,10 +31,7 @@ main :: ()
 
     font := get_font_at_size("W:/JaiGame/", "OpenSans-BoldItalic.ttf", 40);
 
-    grid_size_x := 5;
-    grid_size_y := 5;
-
-    cell_size     := 60.0;
+    cell_size     := 30.0;
     line_thicness := 1.0;
     line_width    := grid_size_x * cell_size;
     line_height   := grid_size_y * cell_size;            
@@ -39,6 +41,10 @@ main :: ()
     aspect_ratio        := cast(float) window_size_x / cast(float) window_size_y;
 
     is_dragging := false;
+
+    grid[2] = true;
+    grid[3] = true;
+    grid[2 + 2 * grid_size_y] = true;
     
     while !should_quit_game
     {
@@ -98,6 +104,7 @@ main :: ()
 
         immediate_begin();
 
+        // Draw gird
         for x : 0..grid_size_x
         {
             xoffset : float = x * cell_size - camera_position.x;
@@ -112,6 +119,19 @@ main :: ()
             my_immediate_quad(xoffset, yoffset, line_width, line_thicness * camera_scale_factor);
         }
 
+        // Draw alive cells
+        for i : 0..(grid_size_x*grid_size_y)-1
+        {
+            if !grid[i] continue;
+
+            offset_x := i % grid_size_x;
+            offset_y := i / grid_size_y;
+
+            my_immediate_quad(offset_x * cell_size - camera_position.x,
+                              offset_y * cell_size - camera_position.y,
+                             cell_size, cell_size);
+        }
+        
         my_immediate_quad(quad_index_x * cell_size - camera_position.x,
                           quad_index_y * cell_size - camera_position.y,
                           cell_size, cell_size);
