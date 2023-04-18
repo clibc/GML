@@ -7,8 +7,11 @@
 
 should_quit_game := false;
 
-grid_size_x :: 200;
-grid_size_y :: 200;
+grid_size_x :: 500;
+grid_size_y :: 500;
+
+camera_zoom_min :: 0.5;
+camera_zoom_max :: 5.0;
 
 grid : [grid_size_x * grid_size_y] bool;
 
@@ -81,7 +84,7 @@ main :: ()
                 old_scale_factor := camera_scale_factor;
 
                 camera_scale_factor += scale_delta;
-                Clamp(*camera_scale_factor, 1.0, 3.0);
+                Clamp(*camera_scale_factor, camera_zoom_min, camera_zoom_max);
 
                 if camera_scale_factor != old_scale_factor
                 {
@@ -106,6 +109,7 @@ main :: ()
 
         immediate_begin();
 
+        // TODD : cull lines and cells that is not visible by the camera!
         // Draw alive cells
         for i : 0..(grid_size_x*grid_size_y)-1
         {
@@ -192,13 +196,12 @@ simulate_generation :: ()
 {
     for grid
     {
-        x, y := get_2d_index(it_index);
-
-        alive_neighbours := get_alive_neighbours(x, y);
-        alive_itself := grid_is_cell_alive(x, y);
-
+        alive_itself := it;
         if !alive_itself
             continue;
+        
+        x, y := get_2d_index(it_index);
+        alive_neighbours := get_alive_neighbours(x, y);
 
         if alive_neighbours < 2
         {
