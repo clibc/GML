@@ -109,7 +109,7 @@ main :: ()
 
         immediate_begin();
 
-        // TODD : cull lines and cells that is not visible by the camera!
+        // TODD : cull lines and cells that are not visible by the camera!
         // Draw alive cells
         for i : 0..(grid_size_x*grid_size_y)-1
         {
@@ -189,7 +189,7 @@ get_alive_neighbours :: (x : int, y : int) -> int
     return alive_neighbours;
 }
 
-died_cells_per_generation    : [..] int;
+dead_cells_per_generation    : [..] int;
 spawned_cells_per_generation : [..] int;
 
 simulate_generation :: ()
@@ -203,14 +203,8 @@ simulate_generation :: ()
         x, y := get_2d_index(it_index);
         alive_neighbours := get_alive_neighbours(x, y);
 
-        if alive_neighbours < 2
-        {
-            array_add(*died_cells_per_generation, it_index);
-        }
-        else if alive_neighbours > 3
-        {
-            array_add(*died_cells_per_generation, it_index);
-        }
+        if alive_neighbours < 2 || alive_neighbours > 3
+            array_add(*dead_cells_per_generation, it_index);
      
         for ox : -1..1
         {
@@ -233,7 +227,7 @@ simulate_generation :: ()
         }
     }
 
-    for died_cells_per_generation
+    for dead_cells_per_generation
     {
         grid[it] = false;
     }
@@ -243,6 +237,6 @@ simulate_generation :: ()
         grid[it] = true;
     }
 
-    array_reset_keeping_memory(*died_cells_per_generation);
+    array_reset_keeping_memory(*dead_cells_per_generation);
     array_reset_keeping_memory(*spawned_cells_per_generation);
 }
