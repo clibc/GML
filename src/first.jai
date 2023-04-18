@@ -7,8 +7,8 @@
 
 should_quit_game := false;
 
-grid_size_x :: 7;
-grid_size_y :: 7;
+grid_size_x :: 200;
+grid_size_y :: 200;
 
 grid : [grid_size_x * grid_size_y] bool;
 
@@ -106,21 +106,6 @@ main :: ()
 
         immediate_begin();
 
-        // Draw gird
-        for x : 0..grid_size_x
-        {
-            xoffset : float = x * cell_size - camera_position.x;
-            yoffset : float = -camera_position.y;
-            my_immediate_quad(xoffset, yoffset, line_thicness * camera_scale_factor, line_height);
-        }
-
-        for y : 0..grid_size_y
-        {
-            xoffset : float = -camera_position.x;
-            yoffset : float = y * cell_size - camera_position.y;
-            my_immediate_quad(xoffset, yoffset, line_width, line_thicness * camera_scale_factor);
-        }
-
         // Draw alive cells
         for i : 0..(grid_size_x*grid_size_y)-1
         {
@@ -134,9 +119,24 @@ main :: ()
                               cell_size, cell_size);
         }
 
+        // Draw gird
+        for y : 0..grid_size_y
+        {
+            xoffset : float = -camera_position.x;
+            yoffset : float = y * cell_size - camera_position.y;
+            my_immediate_quad(xoffset, yoffset, line_width, line_thicness * camera_scale_factor, make_vector4(1, 0, 0, 1));
+        }
+        
+        for x : 0..grid_size_x
+        {
+            xoffset : float = x * cell_size - camera_position.x;
+            yoffset : float = -camera_position.y;
+            my_immediate_quad(xoffset, yoffset, line_thicness * camera_scale_factor, line_height, make_vector4(1, 0, 0, 1));
+        }
+
         my_immediate_quad(quad_index_x * cell_size - camera_position.x,
                           quad_index_y * cell_size - camera_position.y,
-                          cell_size, cell_size);
+                          cell_size, cell_size, make_vector4(0.4, 0.8, 0.4, 0.4));
 
         immediate_flush();
 
@@ -148,13 +148,13 @@ main :: ()
     }
 }
 
-my_immediate_quad :: (x : float, y : float, width : float, height : float)
+my_immediate_quad :: (x : float, y : float, width : float, height : float, color := Vector4.{1,1,1,1})
 {
     bot_left  := make_vector2(x, y);
     bot_right := make_vector2(x + width, y);
     top_right := make_vector2(x + width, y + height);
     top_left  := make_vector2(x, y + height);
-    immediate_quad(bot_left, bot_right, top_right, top_left);
+    immediate_quad(bot_left, bot_right, top_right, top_left, color);
 }
 
 get_2d_index :: (index : int) -> x : int, y : int
@@ -190,34 +190,43 @@ spawned_cells_per_generation : [..] int;
 
 simulate_generation :: ()
 {
-    print("simulating...\n");
-
     for grid
     {
         x, y := get_2d_index(it_index);
 
-        alive_neighbours := get_alive_neighbours(x,y);
+        alive_neighbours := get_alive_neighbours(x, y);
         alive_itself := grid_is_cell_alive(x, y);
 
-        if alive_itself
+        if !alive_itself
+            continue;
+
+        if alive_neighbours < 2
         {
-            if alive_neighbours < 2
-            {
-                print("[%] (%, %) dies of loneliness\n", alive_neighbours, x, y);
-                array_add(*died_cells_per_generation, it_index);
-            }
-            else if alive_neighbours > 3
-            {
-                print("[%] (%, %) dies of overpopulation\n", alive_neighbours, x, y);
-                array_add(*died_cells_per_generation, it_index);
-            }
-            else
-                print("[%] (%, %) survives\n", alive_neighbours, x, y);
+            array_add(*died_cells_per_generation, it_index);
         }
-        else if alive_neighbours == 3
+        else if alive_neighbours > 3
         {
-            print("[%] (%, %) spawns\n", alive_neighbours, x, y);
-            array_add(*spawned_cells_per_generation, it_index);
+            array_add(*died_cells_per_generation, it_index);
+        }
+     
+        for ox : -1..1
+        {
+            for oy : -1..1
+            {
+                nx := x + ox;
+                ny := y + oy;
+
+                if nx < 0 || ny < 0 || nx >= grid_size_x || ny >= grid_size_y
+                    continue;
+
+                if grid_is_cell_alive(nx, ny)
+                    continue;
+                    
+                if get_alive_neighbours(nx, ny) == 3
+                {
+                    array_add(*spawned_cells_per_generation, ny * grid_size_x + nx);
+                }    
+            }
         }
     }
 
