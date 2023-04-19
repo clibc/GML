@@ -8,6 +8,7 @@
 *.vcxproj*
 *.ttf
 build_dir/
+*.exe
 
 # User-specific files
 *.rsuser

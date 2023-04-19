@@ -39,7 +39,7 @@ main :: ()
     set_render_target(window);
     ui_init();
 
-    global_font = get_font_at_size("W:/JaiGame/", "OpenSans-BoldItalic.ttf", 32);
+    global_font = get_font_at_size("./", "OpenSans-BoldItalic.ttf", 32);
 
     cell_size     := 30.0;
     line_thicness := 1.0;
@@ -336,6 +336,19 @@ draw_and_update_ui :: (window: Window_Type)
         {
             is_simulating = !is_simulating;
             time_to_simulate = 0;
+        }
+
+        rect.y -= rect.h + gap;
+    }
+    
+    { // Reset button
+        rect.w = 400;
+        pressed, state, released := button(rect, "Reset to default", *button_theme);
+        
+        if pressed
+        {
+            for grid grid[it_index] = false;
+            grid_set_default_state();
         }
 
         rect.y -= rect.h + gap;
