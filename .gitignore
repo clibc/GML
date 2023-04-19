@@ -6,7 +6,6 @@
 .build/
 *.sln
 *.vcxproj*
-*.ttf
 build_dir/
 *.exe
 
