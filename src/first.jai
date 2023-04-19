@@ -26,7 +26,7 @@ time_to_simulate := 0.0;
 steps_per_second := 1;
 
 is_simulating := false;
-is_dragging := false;
+is_dragging   := false;
 
 main :: ()
 {
@@ -44,9 +44,9 @@ main :: ()
     line_width    := grid_size_x * cell_size;
     line_height   := grid_size_y * cell_size;
 
-    camera_position     : Vector2 = make_vector2(0, 0);
+    camera_position := make_vector2(grid_size_x * cell_size * 0.5 - window_size_x * 0.5, 
+                                    grid_size_y * cell_size * 0.5 - window_size_y * 0.5);
     camera_scale_factor := 1.0;
-    aspect_ratio        := cast(float) window_size_x / cast(float) window_size_y;
 
     frame_start := current_time_monotonic();
 
@@ -58,9 +58,22 @@ main :: ()
         mouse_position       := make_vector2(cast(float) x, cast(float) y) * camera_scale_factor;
         mouse_world_position := mouse_position + camera_position;
 
-        // TODO: change these names
-        quad_index_x := cast(int) mouse_world_position.x / cast(int)cell_size;
-        quad_index_y := cast(int) mouse_world_position.y / cast(int)cell_size;
+        aspect_ratio := cast(float) window_size_x / cast(float) window_size_y;
+        
+        mouse_index_x := cast(int) mouse_world_position.x / cast(int) cell_size;
+        mouse_index_y := cast(int) mouse_world_position.y / cast(int) cell_size;
+
+        for get_window_resizes()
+        {
+            update_window(window);
+         
+            if it.window != window || (window_size_x == it.width && window_size_y == it.height)
+                continue;
+
+            window_size_x = it.width;
+            window_size_y = it.height;
+            print("resizing window %, %\n", window_size_x, window_size_y);
+        }
 
         for events_this_frame
         {
@@ -68,19 +81,10 @@ main :: ()
             {
                 should_quit_game = true;
             }
-            
-            for get_window_resizes()
-            {
-                if it.window != window || (window_size_x == it.width && window_size_y == it.height)
-                    continue;
-
-                window_size_x = it.width;
-                window_size_y = it.height;
-                print("resizing window %, %\n", window_size_x, window_size_y);
-            }
 
             if it.key_pressed && it.key_code == #char "A"
             {
+                is_simulating = false;
                 simulate_generation();
             }
 
@@ -89,13 +93,13 @@ main :: ()
                 is_dragging = it.key_pressed != 0;
             }
 
-            if it.type == .KEYBOARD && it.key_code == .MOUSE_BUTTON_RIGHT
+            if it.key_code == .MOUSE_BUTTON_RIGHT && it.key_pressed
             {
                 // add cell
-                if quad_index_y < grid_size_y && quad_index_x < grid_size_x &&
-                   quad_index_y >= 0 && quad_index_x >= 0
+                if mouse_index_y < grid_size_y && mouse_index_x < grid_size_x &&
+                   mouse_index_y >= 0 && mouse_index_x >= 0
                 {
-                    grid[quad_index_y * grid_size_x + quad_index_x] = true;
+                    grid[mouse_index_y * grid_size_x + mouse_index_x] = !grid[mouse_index_y * grid_size_x + mouse_index_x];
                 }
             }
             
@@ -137,12 +141,16 @@ main :: ()
         clear_render_target(.15, .08, .08, 1);
 
         set_shader_for_color();
+        
+        immediate_begin();
         immediate_set_2d_projection(cast(s32) (window_size_x * camera_scale_factor),
                                     cast(s32) (window_size_y * camera_scale_factor));
 
-        immediate_begin();
+        my_immediate_quad(mouse_index_x * cell_size - camera_position.x,
+                          mouse_index_y * cell_size - camera_position.y,
+                          cell_size, cell_size, make_vector4(1) * 0.4);
 
-        // TODD : cull lines and cells that are not visible by the camera!
+        // TODO : cull lines and cells that are not visible by the camera!
         // Draw alive cells
         for i : 0..(grid_size_x*grid_size_y)-1
         {
@@ -153,15 +161,15 @@ main :: ()
 
             my_immediate_quad(offset_x * cell_size - camera_position.x,
                               offset_y * cell_size - camera_position.y,
-                              cell_size, cell_size);
+                              cell_size, cell_size, make_vector4(0.5, 1, 0, 1));
         }
 
-        // Draw gird
+        // Draw grid
         for y : 0..grid_size_y
         {
             xoffset : float = -camera_position.x;
             yoffset : float = y * cell_size - camera_position.y;
-            my_immediate_quad(xoffset, yoffset, line_width, line_thicness * camera_scale_factor, make_vector4(1, 0, 0, 1));
+            my_immediate_quad(xoffset, yoffset, line_width, line_thicness * camera_scale_factor, make_vector4(0.5, 0, 0, 1));
         }
         
         for x : 0..grid_size_x
@@ -171,13 +179,12 @@ main :: ()
             my_immediate_quad(xoffset, yoffset, line_thicness * camera_scale_factor, line_height, make_vector4(1, 0, 0, 1));
         }
 
-        my_immediate_quad(quad_index_x * cell_size - camera_position.x,
-                          quad_index_y * cell_size - camera_position.y,
-                          cell_size, cell_size, make_vector4(0.4, 0.8, 0.4, 0.4));
+        //immediate_quad(0.0, 0.0, xx window_size_x, xx window_size_y, Vector4.{1,1,1,1});
 
         immediate_flush();
 
         draw_and_update_ui(window);
+
         swap_buffers(window, false);
         
         frame_end := current_time_monotonic();
@@ -296,8 +303,10 @@ draw_and_update_ui :: (window: Window_Type)
     slider_theme.decimals = 0;
     button_theme : Button_Theme;
     button_theme.font = *global_font;
-    
+
     rect := get_rect(10, xx (window_size_y - global_font.character_height - 10), 0, xx global_font.character_height);
+
+    gap :: 10.0;
 
     { // Delta time text
         draw_this : string;
@@ -305,14 +314,14 @@ draw_and_update_ui :: (window: Window_Type)
 
         rect.w = xx prepare_text(*global_font, draw_this);
         label(rect, draw_this, *label_theme);
-        rect.y -= rect.h;
+        rect.y -= rect.h + gap;
     }
 
     { // Simulation frequency slider
         rect.w = 400;
-        sliding := slider(rect, *steps_per_second, 1, 60, 1, *slider_theme);
+        sliding := slider(rect, *steps_per_second, 1, 60, 1, *slider_theme, "Frequency: ");
         if sliding then is_dragging = false;
-        rect.y -= rect.h;
+        rect.y -= rect.h + gap;
     }
 
     { // Simulate button
@@ -327,7 +336,7 @@ draw_and_update_ui :: (window: Window_Type)
             time_to_simulate = 0;
         }
 
-        rect.y -= rect.h;
+        rect.y -= rect.h + gap;
     }
 
     { // Clear button
@@ -340,8 +349,16 @@ draw_and_update_ui :: (window: Window_Type)
             for grid grid[it_index] = false;
         }
 
-        rect.y -= rect.h;
+        rect.y -= rect.h + gap;
     }
+
+    t : string = "Press 'A' to step at a time";
+
+    rect.y = 0;
+    rect.w = xx prepare_text(*global_font, t);;
+    rect.h = xx global_font.character_height;
+
+    label(rect, t, *label_theme);
 
     draw_popups();
 }
