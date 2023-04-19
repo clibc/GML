@@ -33,6 +33,8 @@ main :: ()
     timeBeginPeriod(1);
     SetProcessDPIAware();
 
+    grid_set_default_state();
+
     window := create_window(window_size_x, window_size_y, "Game");
     set_render_target(window);
     ui_init();
@@ -361,4 +363,29 @@ draw_and_update_ui :: (window: Window_Type)
     label(rect, t, *label_theme);
 
     draw_popups();
+}
+
+grid_set_default_state :: ()
+{
+    rel_x := grid_size_x / 2 - 5;
+    rel_y := grid_size_y / 2;
+
+    set :: (x : int, y : int)
+    {
+        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set default grid state\n"); return; }
+        index := y * grid_size_x + x;
+        grid[index] = true;
+    }
+
+    set(rel_x, rel_y);
+    set(rel_x+1, rel_y-1);
+    set(rel_x+2, rel_y-1);
+    set(rel_x+2, rel_y+0);
+    set(rel_x+2, rel_y+1);
+
+    set(rel_x+9, rel_y-3);
+    set(rel_x+10, rel_y-3);
+    set(rel_x+10, rel_y-4);
+    set(rel_x+11, rel_y-4);
+    set(rel_x+11, rel_y-2);
 }
