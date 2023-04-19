@@ -4,6 +4,7 @@
 #import "Simp";
 #import "Math";
 #import "Windows";
+#import "GetRect";
 
 should_quit_game := false;
 
@@ -15,15 +16,28 @@ camera_zoom_max :: 5.0;
 
 grid : [grid_size_x * grid_size_y] bool;
 
-window_size_x :: 1200;
-window_size_y :: 800;
+window_size_x := 1200;
+window_size_y := 800;
+
+global_font : Dynamic_Font;
+
+delta_time  := 0.01667;
+time_to_simulate := 0.0;
+steps_per_second := 1;
+
+is_simulating := false;
+is_dragging := false;
 
 main :: ()
 {
+    timeBeginPeriod(1);
+    SetProcessDPIAware();
+
     window := create_window(window_size_x, window_size_y, "Game");
     set_render_target(window);
+    ui_init();
 
-    font := get_font_at_size("W:/JaiGame/", "OpenSans-BoldItalic.ttf", 40);
+    global_font = get_font_at_size("W:/JaiGame/", "OpenSans-BoldItalic.ttf", 32);
 
     cell_size     := 30.0;
     line_thicness := 1.0;
@@ -34,7 +48,7 @@ main :: ()
     camera_scale_factor := 1.0;
     aspect_ratio        := cast(float) window_size_x / cast(float) window_size_y;
 
-    is_dragging := false;
+    frame_start := current_time_monotonic();
 
     while !should_quit_game
     {
@@ -44,6 +58,7 @@ main :: ()
         mouse_position       := make_vector2(cast(float) x, cast(float) y) * camera_scale_factor;
         mouse_world_position := mouse_position + camera_position;
 
+        // TODO: change these names
         quad_index_x := cast(int) mouse_world_position.x / cast(int)cell_size;
         quad_index_y := cast(int) mouse_world_position.y / cast(int)cell_size;
 
@@ -52,6 +67,16 @@ main :: ()
             if it.type == .QUIT || (it.key_pressed && it.key_code == .ESCAPE)
             {
                 should_quit_game = true;
+            }
+            
+            for get_window_resizes()
+            {
+                if it.window != window || (window_size_x == it.width && window_size_y == it.height)
+                    continue;
+
+                window_size_x = it.width;
+                window_size_y = it.height;
+                print("resizing window %, %\n", window_size_x, window_size_y);
             }
 
             if it.key_pressed && it.key_code == #char "A"
@@ -93,6 +118,14 @@ main :: ()
                     camera_position.y -= window_size_y * delta * 0.5;
                 }
             }
+        }
+        
+        time_to_simulate += delta_time;
+
+        if is_simulating && time_to_simulate > (1.0 / steps_per_second)
+        {
+            simulate_generation();
+            time_to_simulate = 0;
         }
 
         if is_dragging
@@ -144,11 +177,21 @@ main :: ()
 
         immediate_flush();
 
-        draw_text(font, 0, window_size_y - 40, "Hello sailor!");
+        draw_and_update_ui(window);
+        swap_buffers(window, false);
+        
+        frame_end := current_time_monotonic();
+        delta_time = cast(float) to_float64_seconds(frame_end - frame_start);
 
-        swap_buffers(window);
+        sleep_time := 0.01667 - delta_time;
+        if(sleep_time > 0)
+        {
+            milliseconds := cast(s32) (sleep_time * 1000);
+            sleep_milliseconds(milliseconds);
+            delta_time += cast(float) to_float64_seconds(current_time_monotonic() - frame_end);
+        }
 
-        Sleep(1);
+        frame_start = current_time_monotonic();
     }
 }
 
@@ -196,9 +239,10 @@ simulate_generation :: ()
 {
     for grid
     {
-        alive_itself := it;
-        if !alive_itself
+        if !it
             continue;
+        
+        alive_itself := it;
         
         x, y := get_2d_index(it_index);
         alive_neighbours := get_alive_neighbours(x, y);
@@ -222,7 +266,7 @@ simulate_generation :: ()
                 if get_alive_neighbours(nx, ny) == 3
                 {
                     array_add(*spawned_cells_per_generation, ny * grid_size_x + nx);
-                }    
+                }
             }
         }
     }
@@ -239,4 +283,65 @@ simulate_generation :: ()
 
     array_reset_keeping_memory(*dead_cells_per_generation);
     array_reset_keeping_memory(*spawned_cells_per_generation);
+}
+
+draw_and_update_ui :: (window: Window_Type)
+{
+    ui_per_frame_update(window, xx window_size_x, xx window_size_y, get_time());
+
+    label_theme : Label_Theme;
+    label_theme.font = *global_font;
+    slider_theme : Slider_Theme;
+    slider_theme.foreground.font = *global_font;
+    slider_theme.decimals = 0;
+    button_theme : Button_Theme;
+    button_theme.font = *global_font;
+    
+    rect := get_rect(10, xx (window_size_y - global_font.character_height - 10), 0, xx global_font.character_height);
+
+    { // Delta time text
+        draw_this : string;
+        draw_this = sprint("Delta Time : %", delta_time);
+
+        rect.w = xx prepare_text(*global_font, draw_this);
+        label(rect, draw_this, *label_theme);
+        rect.y -= rect.h;
+    }
+
+    { // Simulation frequency slider
+        rect.w = 400;
+        sliding := slider(rect, *steps_per_second, 1, 60, 1, *slider_theme);
+        if sliding then is_dragging = false;
+        rect.y -= rect.h;
+    }
+
+    { // Simulate button
+        rect.w = 400;
+        button_name : string;
+        if is_simulating then button_name = "Stop"; else button_name = "Simulate";
+        pressed, state, released := button(rect, button_name, *button_theme);
+        
+        if pressed
+        {
+            is_simulating = !is_simulating;
+            time_to_simulate = 0;
+        }
+
+        rect.y -= rect.h;
+    }
+
+    { // Clear button
+        rect.w = 400;
+        pressed, state, released := button(rect, "Clear", *button_theme);
+        
+        if pressed
+        {
+            is_simulating = false;
+            for grid grid[it_index] = false;
+        }
+
+        rect.y -= rect.h;
+    }
+
+    draw_popups();
 }
