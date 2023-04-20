@@ -32,6 +32,7 @@ main :: ()
 {
     #if OS == .WINDOWS
     {
+        // TODO: Linux equivalent of these calls?
         #import "Windows";
         timeBeginPeriod(1);
         SetProcessDPIAware();
