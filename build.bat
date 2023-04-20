@@ -1,3 +1,3 @@
 @echo off
 
-jai.exe -release ./gameoflife.jai -msvc_format
+jai.exe -release ./build.jai -msvc_format

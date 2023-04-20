@@ -3,7 +3,6 @@
 #import "Window_Creation";
 #import "Simp";
 #import "Math";
-#import "Windows";
 #import "GetRect";
 
 should_quit_game := false;
@@ -28,18 +27,23 @@ steps_per_second := 1;
 is_simulating := false;
 is_dragging   := false;
 
+
 main :: ()
 {
-    timeBeginPeriod(1);
-    SetProcessDPIAware();
-
-    grid_set_default_state();
+    #if OS == .WINDOWS
+    {
+        #import "Windows";
+        timeBeginPeriod(1);
+        SetProcessDPIAware();
+    }
 
     window := create_window(window_size_x, window_size_y, "Game");
     set_render_target(window);
     ui_init();
 
     global_font = get_font_at_size("./", "OpenSans-BoldItalic.ttf", 32);
+
+    grid_set_default_state();
 
     cell_size     := 30.0;
     line_thicness := 1.0;
