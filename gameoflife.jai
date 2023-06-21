@@ -5,6 +5,8 @@
 #import "Math";
 #import "GetRect";
 
+#load "RLE_Loader.jai";
+
 should_quit_game := false;
 
 grid_size_x :: 500;
@@ -27,7 +29,6 @@ steps_per_second := 1;
 is_simulating := false;
 is_dragging   := false;
 
-
 main :: ()
 {
     #if OS == .WINDOWS
@@ -37,6 +38,8 @@ main :: ()
         timeBeginPeriod(1);
         SetProcessDPIAware();
     }
+
+    LoadRLEFile();
 
     window := create_window(window_size_x, window_size_y, "Game");
     set_render_target(window);
@@ -66,14 +69,14 @@ main :: ()
         mouse_world_position := mouse_position + camera_position;
 
         aspect_ratio := cast(float) window_size_x / cast(float) window_size_y;
-        
+
         mouse_index_x := cast(int) mouse_world_position.x / cast(int) cell_size;
         mouse_index_y := cast(int) mouse_world_position.y / cast(int) cell_size;
 
         for get_window_resizes()
         {
             update_window(window);
-         
+
             if it.window != window || (window_size_x == it.width && window_size_y == it.height)
                 continue;
 
@@ -109,7 +112,7 @@ main :: ()
                     grid[mouse_index_y * grid_size_x + mouse_index_x] = !grid[mouse_index_y * grid_size_x + mouse_index_x];
                 }
             }
-            
+
             if it.type == .MOUSE_WHEEL
             {
                 scale_delta : float;
@@ -130,7 +133,7 @@ main :: ()
                 }
             }
         }
-        
+
         time_to_simulate += delta_time;
 
         if is_simulating && time_to_simulate > (1.0 / steps_per_second)
@@ -148,7 +151,7 @@ main :: ()
         clear_render_target(.15, .08, .08, 1);
 
         set_shader_for_color();
-        
+
         immediate_begin();
         immediate_set_2d_projection(cast(s32) (window_size_x * camera_scale_factor),
                                     cast(s32) (window_size_y * camera_scale_factor));
@@ -157,7 +160,7 @@ main :: ()
                           mouse_index_y * cell_size - camera_position.y,
                           cell_size, cell_size, make_vector4(1) * 0.4);
 
-        // TODO : cull lines and cells that are not visible by the camera!
+        // @TODO : cull lines and cells that are not visible by the camera!
         // Draw alive cells
         for i : 0..(grid_size_x*grid_size_y)-1
         {
@@ -178,7 +181,7 @@ main :: ()
             yoffset : float = y * cell_size - camera_position.y;
             my_immediate_quad(xoffset, yoffset, line_width, line_thicness * camera_scale_factor, make_vector4(0.5, 0, 0, 1));
         }
-        
+
         for x : 0..grid_size_x
         {
             xoffset : float = x * cell_size - camera_position.x;
@@ -193,7 +196,7 @@ main :: ()
         draw_and_update_ui(window);
 
         swap_buffers(window, false);
-        
+
         frame_end := current_time_monotonic();
         delta_time = cast(float) to_float64_seconds(frame_end - frame_start);
 
@@ -255,15 +258,15 @@ simulate_generation :: ()
     {
         if !it
             continue;
-        
+
         alive_itself := it;
-        
+
         x, y := get_2d_index(it_index);
         alive_neighbours := get_alive_neighbours(x, y);
 
         if alive_neighbours < 2 || alive_neighbours > 3
             array_add(*dead_cells_per_generation, it_index);
-     
+
         for ox : -1..1
         {
             for oy : -1..1
@@ -276,7 +279,7 @@ simulate_generation :: ()
 
                 if grid_is_cell_alive(nx, ny)
                     continue;
-                    
+
                 if get_alive_neighbours(nx, ny) == 3
                 {
                     array_add(*spawned_cells_per_generation, ny * grid_size_x + nx);
@@ -336,7 +339,7 @@ draw_and_update_ui :: (window: Window_Type)
         button_name : string;
         if is_simulating then button_name = "Stop"; else button_name = "Simulate";
         pressed, state, released := button(rect, button_name, *button_theme);
-        
+
         if pressed
         {
             is_simulating = !is_simulating;
@@ -345,11 +348,11 @@ draw_and_update_ui :: (window: Window_Type)
 
         rect.y -= rect.h + gap;
     }
-    
+
     { // Reset button
         rect.w = 400;
         pressed, state, released := button(rect, "Reset to default", *button_theme);
-        
+
         if pressed
         {
             for grid grid[it_index] = false;
@@ -362,7 +365,7 @@ draw_and_update_ui :: (window: Window_Type)
     { // Clear button
         rect.w = 400;
         pressed, state, released := button(rect, "Clear", *button_theme);
-        
+
         if pressed
         {
             is_simulating = false;
