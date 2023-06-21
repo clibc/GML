@@ -1,15 +1,34 @@
-LoadRLEFile :: ()
+RLETagType :: enum_flags u8
 {
-    file, is_read := read_entire_file("patterns/rats.rle");
+    DEAD;
+    ALIVE;
+    ENDLINE;
+}
+
+RLEPattern :: struct
+{
+    name    : string;
+    bound_x : int;
+    bound_y : int;
+    tags    : [..] RLETagType;
+}
+
+LoadRLEFile :: (file_path : string) -> RLEPattern
+{
+    file, is_read := read_entire_file(file_path);
     assert(is_read);
 
     lines := split(file, "\n");
 
-    bound_x, bound_y : int;
-    pattern_name : string;
+    pattern          : RLEPattern;
+
+    encountered_bang := false;
 
     for lines
     {
+        if encountered_bang
+            break;
+
         line := it;
         if line[line.count - 1] == #char "\r"
             line.count -= 1;
@@ -23,58 +42,79 @@ LoadRLEFile :: ()
             {
                 line = advance(line, 2);
                 line = eat_spaces(line);
-                pattern_name = tprint("%", line);
+                pattern.name = tprint("%", line);
             }
         }
         else if line[0] == #char "x"
         {
             // parse bound x
             line = advance(line, 4);
-            line, bound_x = ParseNumber(line);
+            line, pattern.bound_x = ParseNumber(line);
 
             // parse bound y
             line = advance(line, 6);
-            line, bound_y = ParseNumber(line);
+            line, pattern.bound_y = ParseNumber(line);
 
             // parce rule
             line = advance(line, 9);
 
-            if(line != "B3/S23")
+            if(line != "B3/S23" && line != "b3/s23")
             {
                 print("only B3/S23 rule supported!\n");
             }
         }
         else // Parse pattern
         {
-            line, run_count := ParseNumber(line);
-
-            next_tag := cast(u8) line[0];
-
-            while !is_digit(next_tag)
+            local_line := line;
+            while local_line.count > 0
             {
-                if next_tag == #char "b"
+                character := cast(u8) local_line[0];
+
+                run_count := 0;
+                tag : RLETagType = 0;
+
+                if is_digit(character)
                 {
-                }
-                else if next_tag == #char "o"
-                {
-                }
-                else if next_tag == #char "$"
-                {
+                    local_line, run_count = ParseNumber(local_line);
+                    character = cast(u8) local_line[0];
                 }
 
-                if line.count > 1
+                if character == #char "b"
                 {
-                    line = advance(line);
-                    next_tag = cast(u8) line[0];
+                    tag = RLETagType.DEAD;
                 }
-                else break;
+                else if character == #char "o"
+                {
+                    tag = RLETagType.ALIVE;
+                }
+                else if character == #char "$"
+                {
+                    tag = RLETagType.ENDLINE;
+                }
+
+                if tag != 0
+                {
+                    run_count = ifx run_count > 0 then run_count else 1;
+
+                    for 1..run_count
+                    {
+                        array_add(*pattern.tags, tag);
+                    }
+                }
+
+                if character == #char "!"
+                {
+                    encountered_bang = true;
+                    break;
+                }
+
+                local_line.data  += 1;
+                local_line.count -= 1;
             }
-
-            run_count = 1;
         }
     }
 
-
+    return pattern;
 }
 
 #scope_file

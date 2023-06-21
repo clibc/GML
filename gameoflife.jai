@@ -1,12 +1,3 @@
-#import "Basic";
-#import "Input";
-#import "Window_Creation";
-#import "Simp";
-#import "Math";
-#import "GetRect";
-
-#load "RLE_Loader.jai";
-
 should_quit_game := false;
 
 grid_size_x :: 500;
@@ -39,7 +30,7 @@ main :: ()
         SetProcessDPIAware();
     }
 
-    LoadRLEFile();
+    pattern := LoadRLEFile("patterns/c2wire.rle");
 
     window := create_window(window_size_x, window_size_y, "Game");
     set_render_target(window);
@@ -47,7 +38,8 @@ main :: ()
 
     global_font = get_font_at_size("./", "OpenSans-BoldItalic.ttf", 32);
 
-    grid_set_default_state();
+    //grid_set_default_state();
+    GridSetRLEPattern(pattern);
 
     cell_size     := 30.0;
     line_thicness := 1.0;
@@ -378,7 +370,7 @@ draw_and_update_ui :: (window: Window_Type)
     t : string = "Press 'A' to step at a time";
 
     rect.y = 0;
-    rect.w = xx prepare_text(*global_font, t);;
+    rect.w = xx prepare_text(*global_font, t);
     rect.h = xx global_font.character_height;
 
     label(rect, t, *label_theme);
@@ -388,15 +380,15 @@ draw_and_update_ui :: (window: Window_Type)
 
 grid_set_default_state :: ()
 {
-    rel_x := grid_size_x / 2 - 5;
-    rel_y := grid_size_y / 2;
-
     set :: (x : int, y : int)
     {
-        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set default grid state\n"); return; }
+        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set cell : exceeding grid boundaries : %, %\n", x, y); return; }
         index := y * grid_size_x + x;
         grid[index] = true;
     }
+
+    rel_x := grid_size_x / 2 - 5;
+    rel_y := grid_size_y / 2;
 
     set(rel_x, rel_y);
     set(rel_x+1, rel_y-1);
@@ -410,3 +402,43 @@ grid_set_default_state :: ()
     set(rel_x+11, rel_y-4);
     set(rel_x+11, rel_y-2);
 }
+
+GridSetRLEPattern :: (pattern : RLEPattern)
+{
+    set :: (x : int, y : int)
+    {
+        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set cell : exceeding grid boundaries : %, %\n", x, y); return; }
+        index := y * grid_size_x + x;
+        grid[index] = true;
+    }
+
+    rel_x := grid_size_x / 2 - pattern.bound_x/2;
+    rel_y := grid_size_y / 2 + pattern.bound_y/2;
+
+    current_x := rel_x;
+    current_y := rel_y;
+
+    for pattern.tags
+    {
+        if it == .ENDLINE
+        {
+            current_x  = rel_x;
+            current_y -= 1;
+            continue;
+        }
+        else if it == .ALIVE
+        {
+            set(current_x, current_y);
+        }
+        current_x += 1;
+    }
+}
+
+#load "RLE_Loader.jai";
+
+#import "Basic";
+#import "Input";
+#import "Window_Creation";
+#import "Simp";
+#import "Math";
+#import "GetRect";
