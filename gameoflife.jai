@@ -1,3 +1,5 @@
+grid_use_array :: true;
+
 should_quit_game := false;
 
 grid_size_x :: 1500;
@@ -6,7 +8,14 @@ grid_size_y :: 1500;
 camera_zoom_min :: 0.5;
 camera_zoom_max :: 5.0;
 
-grid : [grid_size_x * grid_size_y] bool;
+#if grid_use_array
+{
+    grid : [grid_size_x * grid_size_y] bool;
+}
+else
+{
+    grid_table : Table(int, bool);
+}
 
 window_size_x := 1200;
 window_size_y := 800;
@@ -22,7 +31,7 @@ is_dragging   := false;
 
 loaded_patterns : [..] RLEPattern;
 loaded_pattern_names : [..] string;
-loaded_patterns_dropdown_current_choice : s32;
+loaded_patterns_dropdown_current_choice : s32 = -1;
 
 main :: ()
 {
@@ -49,7 +58,7 @@ main :: ()
     line_width    := grid_size_x * cell_size;
     line_height   := grid_size_y * cell_size;
 
-    camera_position := make_vector2(grid_size_x * cell_size * 0.5 - window_size_x * 0.5, 
+    camera_position := make_vector2(grid_size_x * cell_size * 0.5 - window_size_x * 0.5,
                                     grid_size_y * cell_size * 0.5 - window_size_y * 0.5);
     camera_scale_factor := 1.0;
 
@@ -104,7 +113,8 @@ main :: ()
                 if mouse_index_y < grid_size_y && mouse_index_x < grid_size_x &&
                    mouse_index_y >= 0 && mouse_index_x >= 0
                 {
-                    grid[mouse_index_y * grid_size_x + mouse_index_x] = !grid[mouse_index_y * grid_size_x + mouse_index_x];
+                    //grid[mouse_index_y * grid_size_x + mouse_index_x] = !grid[mouse_index_y * grid_size_x + mouse_index_x];
+                    grid_toggle(mouse_index_x, mouse_index_y);
                 }
             }
 
@@ -155,8 +165,9 @@ main :: ()
                           mouse_index_y * cell_size - camera_position.y,
                           cell_size, cell_size, make_vector4(1) * 0.4);
 
-        // @TODO : cull lines and cells that are not visible by the camera!
         // Draw alive cells
+#if grid_use_array
+{
         for i : 0..(grid_size_x*grid_size_y)-1
         {
             if !grid[i] continue;
@@ -168,7 +179,24 @@ main :: ()
                               offset_y * cell_size - camera_position.y,
                               cell_size, cell_size, make_vector4(0.5, 1, 0, 1));
         }
+}
+else
+{
+        for grid_table
+        {
+            if !it continue;
 
+            i := it_index;
+
+            offset_x := i % grid_size_x;
+            offset_y := i / grid_size_x;
+
+            my_immediate_quad(offset_x * cell_size - camera_position.x,
+                              offset_y * cell_size - camera_position.y,
+                              cell_size, cell_size, make_vector4(0.5, 1, 0, 1));
+        }
+}
+        // @TODO : cull lines and cells that are not visible by the camera!
         // Draw grid
         for y : 0..grid_size_y
         {
@@ -221,11 +249,60 @@ get_2d_index :: (index : int) -> x : int, y : int
     return index % grid_size_x, index / grid_size_x;
 }
 
-grid_is_cell_alive :: (x : int, y : int) -> bool
+#if grid_use_array
 {
-    if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y return false;
-    index := y * grid_size_x + x;
-    return grid[index];
+    grid_clear :: ()
+    {
+        for grid grid[it_index] = false;
+    }
+
+    set :: (x : int, y : int)
+    {
+        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set cell : exceeding grid boundaries : %, %\n", x, y); return; }
+        index := y * grid_size_x + x;
+        grid[index] = true;
+    }
+
+    grid_toggle :: (x : int, y : int)
+    {
+        index := y * grid_size_x + x;
+        grid[index] = !grid_is_cell_alive(x, y);
+    }
+
+    grid_is_cell_alive :: (x : int, y : int) -> bool
+    {
+        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y return false;
+        index := y * grid_size_x + x;
+        return grid[index];
+    }
+}
+else
+{
+    grid_clear :: ()
+    {
+        table_reset(*grid_table);
+    }
+
+    set :: (x : int, y : int)
+    {
+        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set cell : exceeding grid boundaries : %, %\n", x, y); return; }
+        index := y * grid_size_x + x;
+        table_set(*grid_table, index, true);
+    }
+
+    grid_toggle :: (x : int, y : int)
+    {
+        index := y * grid_size_x + x;
+        table_set(*grid_table, index, !grid_is_cell_alive(x, y));
+    }
+
+    grid_is_cell_alive :: (x : int, y : int) -> bool
+    {
+        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y return false;
+        index := y * grid_size_x + x;
+        value, success := table_find(*grid_table, index);
+        return success && value;
+    }
 }
 
 get_alive_neighbours :: (x : int, y : int) -> int
@@ -249,6 +326,8 @@ spawned_cells_per_generation : [..] int;
 
 simulate_generation :: ()
 {
+    #if grid_use_array
+    {
     for grid
     {
         if !it
@@ -292,6 +371,53 @@ simulate_generation :: ()
     {
         grid[it] = true;
     }
+    }
+    else
+    {
+    for grid_table
+    {
+        if !it
+            continue;
+
+        alive_itself := it;
+
+        x, y := get_2d_index(it_index);
+        alive_neighbours := get_alive_neighbours(x, y);
+
+        if alive_neighbours < 2 || alive_neighbours > 3
+            array_add(*dead_cells_per_generation, it_index);
+
+        for ox : -1..1
+        {
+            for oy : -1..1
+            {
+                nx := x + ox;
+                ny := y + oy;
+
+                if nx < 0 || ny < 0 || nx >= grid_size_x || ny >= grid_size_y
+                    continue;
+
+                if grid_is_cell_alive(nx, ny)
+                    continue;
+
+                if get_alive_neighbours(nx, ny) == 3
+                {
+                    array_add(*spawned_cells_per_generation, ny * grid_size_x + nx);
+                }
+            }
+        }
+    }
+    for dead_cells_per_generation
+    {
+        table_set(*grid_table, it, false);
+    }
+
+    for spawned_cells_per_generation
+    {
+        table_set(*grid_table, it, true);
+    }
+    }
+
 
     array_reset_keeping_memory(*dead_cells_per_generation);
     array_reset_keeping_memory(*spawned_cells_per_generation);
@@ -328,6 +454,7 @@ update_and_draw_ui :: (window: Window_Type)
         rect.y -= rect.h + gap;
     }
 
+    if loaded_pattern_names.count > 0
     { // Pattern selection dropdown
         rect.w = 500;
         state := dropdown(rect, loaded_pattern_names, *loaded_patterns_dropdown_current_choice, *dropdown_theme);
@@ -362,7 +489,7 @@ update_and_draw_ui :: (window: Window_Type)
 
         if pressed
         {
-            for grid grid[it_index] = false;
+            grid_clear();
             grid_set_default_state();
         }
 
@@ -398,20 +525,8 @@ update_and_draw_ui :: (window: Window_Type)
     }
 }
 
-grid_clear :: ()
-{
-    for grid grid[it_index] = false;
-}
-
 grid_set_default_state :: ()
 {
-    set :: (x : int, y : int)
-    {
-        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set cell : exceeding grid boundaries : %, %\n", x, y); return; }
-        index := y * grid_size_x + x;
-        grid[index] = true;
-    }
-
     rel_x := grid_size_x / 2 - 5;
     rel_y := grid_size_y / 2;
 
@@ -445,13 +560,6 @@ LoadPattersInFolder :: (path : string)
 
 GridSetRLEPattern :: (pattern : RLEPattern)
 {
-    set :: (x : int, y : int)
-    {
-        if x < 0 || y < 0 || x >= grid_size_x || y >= grid_size_y { print("Failed to set cell : exceeding grid boundaries : %, %\n", x, y); return; }
-        index := y * grid_size_x + x;
-        grid[index] = true;
-    }
-
     grid_clear();
 
     rel_x := grid_size_x / 2 - pattern.bound_x/2;
@@ -485,3 +593,4 @@ GridSetRLEPattern :: (pattern : RLEPattern)
 #import "Math";
 #import "GetRect";
 #import "File_Utilities";
+#import "Hash_Table";
