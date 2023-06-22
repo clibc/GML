@@ -18,12 +18,11 @@ LoadRLEFile :: (file_path : string) -> RLEPattern
     file, is_read := read_entire_file(file_path);
     assert(is_read);
 
-    lines := split(file, "\n");
-
-    pattern          : RLEPattern;
+    pattern : RLEPattern;
 
     encountered_bang := false;
 
+    lines := split(file, "\n");
     for lines
     {
         if encountered_bang

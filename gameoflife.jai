@@ -1,7 +1,7 @@
 should_quit_game := false;
 
-grid_size_x :: 500;
-grid_size_y :: 500;
+grid_size_x :: 1500;
+grid_size_y :: 1500;
 
 camera_zoom_min :: 0.5;
 camera_zoom_max :: 5.0;
@@ -20,6 +20,10 @@ steps_per_second := 1;
 is_simulating := false;
 is_dragging   := false;
 
+loaded_patterns : [..] RLEPattern;
+loaded_pattern_names : [..] string;
+loaded_patterns_dropdown_current_choice : s32;
+
 main :: ()
 {
     #if OS == .WINDOWS
@@ -30,7 +34,7 @@ main :: ()
         SetProcessDPIAware();
     }
 
-    pattern := LoadRLEFile("patterns/c2wire.rle");
+    LoadPattersInFolder("patterns/");
 
     window := create_window(window_size_x, window_size_y, "Game");
     set_render_target(window);
@@ -38,8 +42,7 @@ main :: ()
 
     global_font = get_font_at_size("./", "OpenSans-BoldItalic.ttf", 32);
 
-    //grid_set_default_state();
-    GridSetRLEPattern(pattern);
+    grid_set_default_state();
 
     cell_size     := 30.0;
     line_thicness := 1.0;
@@ -185,7 +188,7 @@ main :: ()
 
         immediate_flush();
 
-        draw_and_update_ui(window);
+        update_and_draw_ui(window);
 
         swap_buffers(window, false);
 
@@ -294,7 +297,7 @@ simulate_generation :: ()
     array_reset_keeping_memory(*spawned_cells_per_generation);
 }
 
-draw_and_update_ui :: (window: Window_Type)
+update_and_draw_ui :: (window: Window_Type)
 {
     ui_per_frame_update(window, xx window_size_x, xx window_size_y, get_time());
 
@@ -305,8 +308,14 @@ draw_and_update_ui :: (window: Window_Type)
     slider_theme.decimals = 0;
     button_theme : Button_Theme;
     button_theme.font = *global_font;
+    dropdown_theme : Dropdown_Theme;
+    dropdown_theme.theme_for_current_value = button_theme;
+    dropdown_theme.theme_for_each_choice = button_theme;
+    dropdown_theme.theme_for_current_choice = button_theme;
 
     rect := get_rect(10, xx (window_size_y - global_font.character_height - 10), 0, xx global_font.character_height);
+
+    old_choice := loaded_patterns_dropdown_current_choice;
 
     gap :: 10.0;
 
@@ -316,6 +325,12 @@ draw_and_update_ui :: (window: Window_Type)
 
         rect.w = xx prepare_text(*global_font, draw_this);
         label(rect, draw_this, *label_theme);
+        rect.y -= rect.h + gap;
+    }
+
+    { // Pattern selection dropdown
+        rect.w = 500;
+        state := dropdown(rect, loaded_pattern_names, *loaded_patterns_dropdown_current_choice, *dropdown_theme);
         rect.y -= rect.h + gap;
     }
 
@@ -361,7 +376,7 @@ draw_and_update_ui :: (window: Window_Type)
         if pressed
         {
             is_simulating = false;
-            for grid grid[it_index] = false;
+            grid_clear();
         }
 
         rect.y -= rect.h + gap;
@@ -376,6 +391,16 @@ draw_and_update_ui :: (window: Window_Type)
     label(rect, t, *label_theme);
 
     draw_popups();
+
+    if old_choice != loaded_patterns_dropdown_current_choice
+    {
+        GridSetRLEPattern(loaded_patterns[loaded_patterns_dropdown_current_choice]);
+    }
+}
+
+grid_clear :: ()
+{
+    for grid grid[it_index] = false;
 }
 
 grid_set_default_state :: ()
@@ -403,6 +428,21 @@ grid_set_default_state :: ()
     set(rel_x+11, rel_y-2);
 }
 
+LoadPattersInFolder :: (path : string)
+{
+    FileVisitor :: (info: *File_Visit_Info, user_data: int)
+    {
+        if ends_with(info.short_name, ".rle")
+        {
+            pattern := LoadRLEFile(info.full_name);
+            array_add(*loaded_patterns, pattern);
+            array_add(*loaded_pattern_names, pattern.name);
+        }
+    }
+
+    visit_files(path, false, 0, FileVisitor);
+}
+
 GridSetRLEPattern :: (pattern : RLEPattern)
 {
     set :: (x : int, y : int)
@@ -411,6 +451,8 @@ GridSetRLEPattern :: (pattern : RLEPattern)
         index := y * grid_size_x + x;
         grid[index] = true;
     }
+
+    grid_clear();
 
     rel_x := grid_size_x / 2 - pattern.bound_x/2;
     rel_y := grid_size_y / 2 + pattern.bound_y/2;
@@ -442,3 +484,4 @@ GridSetRLEPattern :: (pattern : RLEPattern)
 #import "Simp";
 #import "Math";
 #import "GetRect";
+#import "File_Utilities";
