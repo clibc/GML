@@ -1,12 +1,14 @@
 should_quit_game := false;
 
-grid_size_x :: 15000;
-grid_size_y :: 15000;
+grid_size_x :: 1000;
+grid_size_y :: 1000;
+cell_size :: 30.0;
 
 camera_zoom_min :: 0.5;
 camera_zoom_max :: 5.0;
 
 grid_table : Table(int, bool);
+grid_cells_time_table : Table(int, float);
 
 window_size_x := 1200;
 window_size_y := 800;
@@ -20,9 +22,12 @@ steps_per_second := 1;
 is_simulating := false;
 is_dragging   := false;
 
-loaded_patterns : [..] RLEPattern;
+loaded_patterns      : [..] RLEPattern;
 loaded_pattern_names : [..] string;
 loaded_patterns_dropdown_current_choice : s32 = -1;
+
+camera_position      : Vector2;
+camera_scale_factor  : float;
 
 main :: ()
 {
@@ -42,18 +47,17 @@ main :: ()
 
     global_font = get_font_at_size("./", "OpenSans-BoldItalic.ttf", 32);
 
-    grid_set_default_state();
-
-    cell_size     := 30.0;
     line_thicness := 1.0;
     line_width    := grid_size_x * cell_size;
     line_height   := grid_size_y * cell_size;
 
-    camera_position := make_vector2(grid_size_x * cell_size * 0.5 - window_size_x * 0.5,
-                                    grid_size_y * cell_size * 0.5 - window_size_y * 0.5);
-    camera_scale_factor := 1.0;
+    camera_position = make_vector2(grid_size_x * cell_size * 0.5 - window_size_x * 0.5,
+                                   grid_size_y * cell_size * 0.5 - window_size_y * 0.5);
+    camera_scale_factor = 1.0;
 
     frame_start := current_time_monotonic();
+
+    grid_set_default_state();
 
     while !should_quit_game
     {
@@ -163,12 +167,24 @@ main :: ()
 
             i := it_index;
 
+            color0 := make_vector4(0.5, 1, 0, 1);
+            color1 := color0 * 0.4;
+            color := color0;
+            ptr := table_find_pointer(*grid_cells_time_table, i);
+            if ptr
+            {
+                <<ptr += delta_time * 15 * steps_per_second / 60.0;
+                t := <<ptr;
+                Clamp(*t, 0.0, 5.0);
+                color = lerp(color0, color1, t / 5.0);
+            }
             offset_x := i % grid_size_x;
             offset_y := i / grid_size_x;
 
+            color.w = 1;
             my_immediate_quad(offset_x * cell_size - camera_position.x,
                               offset_y * cell_size - camera_position.y,
-                              cell_size, cell_size, make_vector4(0.5, 1, 0, 1));
+                              cell_size, cell_size, color);
         }
 
         // @TODO : cull lines and cells that are not visible by the camera!
@@ -227,6 +243,7 @@ get_2d_index :: (index : int) -> x : int, y : int
 grid_clear :: ()
 {
     table_reset(*grid_table);
+    table_reset(*grid_cells_time_table);
 }
 
 set :: (x : int, y : int)
@@ -313,6 +330,7 @@ simulate_generation :: ()
     for spawned_cells_per_generation
     {
         table_set(*grid_table, it, true);
+        table_set(*grid_cells_time_table, it, 0);
     }
 
     array_reset_keeping_memory(*dead_cells_per_generation);
@@ -340,7 +358,7 @@ update_and_draw_ui :: (window: Window_Type)
     old_choice := loaded_patterns_dropdown_current_choice;
 
     gap :: 10.0;
-
+/*
     { // Delta time text
         draw_this : string;
         draw_this = sprint("Delta Time : %", delta_time);
@@ -349,7 +367,7 @@ update_and_draw_ui :: (window: Window_Type)
         label(rect, draw_this, *label_theme);
         rect.y -= rect.h + gap;
     }
-
+*/
     if loaded_pattern_names.count > 0
     { // Pattern selection dropdown
         rect.w = 500;
@@ -478,6 +496,16 @@ GridSetRLEPattern :: (pattern : RLEPattern)
         }
         current_x += 1;
     }
+
+    pattern_world_size_x := pattern.bound_x * cell_size;
+    pattern_world_size_y := pattern.bound_y * cell_size;
+    camera_scale_factor = (pattern_world_size_x * pattern_world_size_y) / (window_size_x * window_size_y) + 1;
+    Clamp(*camera_scale_factor, camera_zoom_min, camera_zoom_max);
+
+    camera_position.x = rel_x * cell_size + pattern_world_size_x * 0.5;
+    camera_position.y = rel_y * cell_size - pattern_world_size_y * 0.5;
+    camera_position.x -= window_size_x*0.5 * camera_scale_factor;
+    camera_position.y -= window_size_y*0.5 * camera_scale_factor;
 }
 
 #load "RLE_Loader.jai";
